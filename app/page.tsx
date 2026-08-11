@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { 
   Plus, Search, Trash2, Edit, Phone, Globe, MapPin, 
   Car, Building2, CheckCircle, Clock, XCircle, AlertCircle, RefreshCw, 
@@ -590,9 +591,11 @@ export default function Home() {
                       </select>
                     </div>
 
-                    <h3 className="font-bold text-slate-800 text-lg mb-2 leading-snug">
-                      {item.name}
-                    </h3>
+                    <Link href={`/dealership/${item.id}`}>
+                      <h3 className="font-bold text-slate-800 text-lg mb-2 leading-snug hover:text-blue-600 transition">
+                        {item.name}
+                      </h3>
+                    </Link>
                     
                     {item.distance !== null && (
                       <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-semibold mb-3">
