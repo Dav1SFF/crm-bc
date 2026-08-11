@@ -96,6 +96,9 @@ export default function Home() {
   const [selectedStatus, setSelectedStatus] = useState<string>("Все");
   const [selectedCity, setSelectedCity] = useState<City>("Белая Церковь");
   
+  const [isAddingCity, setIsAddingCity] = useState(false);
+  const [newCityInput, setNewCityInput] = useState("");
+  
   // Геолокация
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
 
@@ -1001,34 +1004,70 @@ export default function Home() {
                         <option value="Киев">Киев</option>
                       </select>
                     ) : (
-                      <div className="flex gap-2">
-                        <select
-                          value={formData.city}
-                          onChange={(e) =>
-                            setFormData({ ...formData, city: e.target.value as City })
-                          }
-                          className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          {dbCities.length === 0 && <option value="">Сначала добавьте город</option>}
-                          {dbCities.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
-                        </select>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            const newCity = prompt("Введите название нового города:");
-                            if (newCity) {
-                              await supabase.from("cities").insert([{ name: newCity, created_by: currentUser }]);
-                              logAction(currentUser, 'ADD_CITY', undefined, newCity);
-                              const { data } = await supabase.from("cities").select("name").order("name");
-                              if (data) setDbCities(data);
-                              setFormData({ ...formData, city: newCity as City });
-                              setSelectedCity(newCity as City);
-                            }
-                          }}
-                          className="px-3 py-2 bg-slate-200 hover:bg-slate-300 rounded-xl text-sm font-medium transition"
-                        >
-                          + Новый
-                        </button>
+                      <div className="flex gap-2 items-center">
+                        {isAddingCity ? (
+                          <>
+                            <input
+                              type="text"
+                              value={newCityInput}
+                              onChange={(e) => setNewCityInput(e.target.value)}
+                              placeholder="Название города..."
+                              className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const city = newCityInput.trim();
+                                if (city) {
+                                  const { error } = await supabase.from("cities").insert([{ name: city, created_by: currentUser }]);
+                                  if (error) {
+                                    alert("Ошибка БД при добавлении города: " + error.message);
+                                  } else {
+                                    logAction(currentUser, 'ADD_CITY', undefined, city);
+                                    const { data } = await supabase.from("cities").select("name").order("name");
+                                    if (data) setDbCities(data);
+                                    setFormData({ ...formData, city: city as City });
+                                    setSelectedCity(city as City);
+                                  }
+                                }
+                                setIsAddingCity(false);
+                                setNewCityInput("");
+                              }}
+                              className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition"
+                            >
+                              Ок
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsAddingCity(false);
+                                setNewCityInput("");
+                              }}
+                              className="px-3 py-2 bg-slate-100 text-slate-500 rounded-xl text-sm font-medium hover:bg-slate-200 transition"
+                            >
+                              Отмена
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <select
+                              value={formData.city || ""}
+                              onChange={(e) => setFormData({ ...formData, city: e.target.value as City })}
+                              className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              {dbCities.length === 0 && <option value="">Сначала добавьте город</option>}
+                              {dbCities.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => setIsAddingCity(true)}
+                              className="px-3 py-2 bg-slate-200 hover:bg-slate-300 rounded-xl text-sm font-medium transition whitespace-nowrap"
+                            >
+                              + Новый
+                            </button>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
