@@ -295,16 +295,12 @@ export default function Home() {
   const getStatusBadge = (status: Status) => {
     switch (status) {
       case "Новый":
-      case "Новий":
         return "bg-blue-100 text-blue-800 border-blue-200";
       case "В работе":
-      case "В роботі":
         return "bg-yellow-100 text-yellow-800 border-yellow-200";
       case "Сделка":
-      case "Угода":
         return "bg-green-100 text-green-800 border-green-200";
       case "Отказ":
-      case "Відмова":
         return "bg-red-100 text-red-800 border-red-200";
       default:
         return "bg-slate-100 text-slate-800 border-slate-200";
@@ -457,7 +453,7 @@ export default function Home() {
               <div>
                 <p className="text-xs text-slate-500 font-medium">В работе</p>
                 <p className="text-2xl font-bold text-yellow-600">
-                  {processedItems.filter((i) => i.status === "В работе" || i.status === "В роботі").length}
+                  {processedItems.filter((i) => i.status === "В работе").length}
                 </p>
               </div>
               <Clock className="w-8 h-8 text-yellow-500 opacity-50" />
@@ -466,7 +462,7 @@ export default function Home() {
               <div>
                 <p className="text-xs text-slate-500 font-medium">Сделки</p>
                 <p className="text-2xl font-bold text-green-600">
-                  {processedItems.filter((i) => i.status === "Сделка" || i.status === "Угода").length}
+                  {processedItems.filter((i) => i.status === "Сделка").length}
                 </p>
               </div>
               <CheckCircle className="w-8 h-8 text-green-500 opacity-50" />
@@ -475,7 +471,7 @@ export default function Home() {
               <div>
                 <p className="text-xs text-slate-500 font-medium">Отказы</p>
                 <p className="text-2xl font-bold text-red-600">
-                  {processedItems.filter((i) => i.status === "Отказ" || i.status === "Відмова").length}
+                  {processedItems.filter((i) => i.status === "Отказ").length}
                 </p>
               </div>
               <XCircle className="w-8 h-8 text-red-500 opacity-50" />
@@ -514,12 +510,6 @@ export default function Home() {
                         <option value="В работе">В работе</option>
                         <option value="Сделка">Сделка</option>
                         <option value="Отказ">Отказ</option>
-                        
-                        {/* Fallbacks */}
-                        {item.status === "Новий" && <option value="Новий">Новий</option>}
-                        {item.status === "В роботі" && <option value="В роботі">В роботі</option>}
-                        {item.status === "Угода" && <option value="Угода">Угода</option>}
-                        {item.status === "Відмова" && <option value="Відмова">Відмова</option>}
                       </select>
                     </div>
 
