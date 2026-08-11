@@ -150,6 +150,20 @@ export default function DealershipPage({ params }: { params: Promise<{ id: strin
     setItem({ ...item, reminders: updatedReminders });
     
     await supabase.from("dealerships").update({ reminders: updatedReminders }).eq("id", id);
+
+    try {
+      const formattedTime = new Date(reminder.date).toLocaleString('ru-RU', { timeZone: 'Europe/Kyiv' });
+      const objectLink = `https://crm-bc.vercel.app/dealership/${id}`;
+      const msg = `✅ *Новое напоминание: ${reminder.type}*\n\n🚗 Объект: *${item.name}*\n🕒 Назначено на: ${formattedTime}\n👤 Кто поставил: ${reminder.author}\n\n🔗 [Открыть объект в CRM](${objectLink})`;
+      await fetch('/api/telegram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg })
+      });
+    } catch (e) {
+      console.error("Failed to notify telegram", e);
+    }
+
     alert("Напоминание успешно добавлено!");
     setReminderDate("");
   };

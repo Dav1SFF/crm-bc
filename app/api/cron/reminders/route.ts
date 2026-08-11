@@ -40,13 +40,13 @@ export async function GET(request: Request) {
 
       // Check 3 hours (180 mins)
       if (diffMinutes <= 180 && diffMinutes > 60 && !reminder.notified_3h) {
-        await sendTelegramAlert(dealership.name, reminder, `через ${Math.ceil(diffMinutes / 60)} ч.`);
+        await sendTelegramAlert(dealership.id, dealership.name, reminder, `через ${Math.ceil(diffMinutes / 60)} ч.`);
         updatedReminders[i].notified_3h = true;
         modified = true;
       }
       // Check 1 hour (60 mins)
       else if (diffMinutes <= 60 && diffMinutes > 15 && !reminder.notified_1h) {
-        await sendTelegramAlert(dealership.name, reminder, `через ${Math.ceil(diffMinutes)} мин.`);
+        await sendTelegramAlert(dealership.id, dealership.name, reminder, `через ${Math.ceil(diffMinutes)} мин.`);
         updatedReminders[i].notified_1h = true;
         // If we missed the 3h one, mark it as well
         updatedReminders[i].notified_3h = true;
@@ -54,7 +54,7 @@ export async function GET(request: Request) {
       }
       // Check 15 mins
       else if (diffMinutes <= 15 && !reminder.notified_15m) {
-        await sendTelegramAlert(dealership.name, reminder, `через ${Math.ceil(diffMinutes)} минут!`);
+        await sendTelegramAlert(dealership.id, dealership.name, reminder, `через ${Math.ceil(diffMinutes)} минут!`);
         updatedReminders[i].notified_15m = true;
         updatedReminders[i].notified_1h = true;
         updatedReminders[i].notified_3h = true;
@@ -71,9 +71,11 @@ export async function GET(request: Request) {
   return NextResponse.json({ success: true, updates });
 }
 
-async function sendTelegramAlert(dealershipName: string, reminder: any, timeLeft: string) {
+async function sendTelegramAlert(dealershipId: string, dealershipName: string, reminder: any, timeLeft: string) {
   const formattedTime = new Date(reminder.date).toLocaleString('ru-RU', { timeZone: 'Europe/Kyiv' });
-  const message = `🔔 *Напоминание: ${reminder.type}*\n\n🚗 Объект: *${dealershipName}*\n🕒 Время: ${formattedTime}\n⏳ Ожидается: *${timeLeft}*\n👤 От: ${reminder.author}`;
+  const objectLink = `https://crm-bc.vercel.app/dealership/${dealershipId}`;
+  
+  const message = `🔔 *Напоминание: ${reminder.type}*\n\n🚗 Объект: *${dealershipName}*\n🕒 Время: ${formattedTime}\n⏳ Ожидается: *${timeLeft}*\n👤 От: ${reminder.author}\n\n🔗 [Открыть объект в CRM](${objectLink})`;
 
   for (const adminId of ADMIN_IDS) {
     try {
