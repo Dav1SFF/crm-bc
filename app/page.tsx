@@ -5,13 +5,20 @@ import Image from "next/image";
 import { 
   Plus, Search, Trash2, Edit, Phone, Globe, MapPin, 
   Car, Building2, CheckCircle, Clock, XCircle, AlertCircle, RefreshCw, 
-  Map, Navigation
+  Map, Navigation, MessageSquare, Send, X
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 type Category = "Официальные автосалоны" | "Авторынки и площадки" | "Автовыкуп";
 type Status = "Новый" | "В работе" | "Сделка" | "Отказ";
 type City = "Белая Церковь" | "Киев";
+
+interface Comment {
+  id: string;
+  author: string;
+  text: string;
+  createdAt: string;
+}
 
 interface Dealership {
   id: string;
@@ -25,6 +32,7 @@ interface Dealership {
   city: City;
   lat?: number;
   lng?: number;
+  comments?: Comment[];
 }
 
 const CREDENTIALS = {
@@ -61,6 +69,7 @@ function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon
 
 export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUser, setCurrentUser] = useState<string>("");
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [loginError, setLoginError] = useState("");
 
@@ -79,6 +88,12 @@ export default function Home() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Dealership | null>(null);
 
+  // Состояние комментариев
+  const [expandedCommentsId, setExpandedCommentsId] = useState<string | null>(null);
+  const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState("");
+
   const [formData, setFormData] = useState({
     name: "",
     category: "Официальные автосалоны" as Category,
@@ -93,8 +108,10 @@ export default function Home() {
 
   useEffect(() => {
     const authStatus = localStorage.getItem("crm_auth");
+    const user = localStorage.getItem("crm_user");
     if (authStatus === "true") {
       setIsAuthenticated(true);
+      if (user) setCurrentUser(user);
     }
   }, []);
 
@@ -119,7 +136,9 @@ export default function Home() {
     const { username, password } = loginForm;
     if (CREDENTIALS[username as keyof typeof CREDENTIALS] === password) {
       setIsAuthenticated(true);
+      setCurrentUser(username);
       localStorage.setItem("crm_auth", "true");
+      localStorage.setItem("crm_user", username);
       setLoginError("");
     } else {
       setLoginError("Неверный логин или пароль");
@@ -128,7 +147,9 @@ export default function Home() {
 
   const handleLogout = () => {
     setIsAuthenticated(false);
+    setCurrentUser("");
     localStorage.removeItem("crm_auth");
+    localStorage.removeItem("crm_user");
   };
 
   const fetchItems = async () => {
@@ -143,7 +164,8 @@ export default function Home() {
         ...item,
         category: categoryMap[item.category] || item.category,
         status: statusMap[item.status] || item.status,
-        city: item.city || "Белая Церковь" // Fallback если колонка пустая
+        city: item.city || "Белая Церковь", // Fallback если колонка пустая
+        comments: item.comments || []
       }));
       setItems(translatedData as Dealership[]);
     }
@@ -255,6 +277,59 @@ export default function Home() {
     fetchItems();
   };
 
+  // Comments Logic
+  const handleAddComment = async (dealershipId: string) => {
+    const text = commentInputs[dealershipId]?.trim();
+    if (!text) return;
+
+    const dealership = items.find(i => i.id === dealershipId);
+    if (!dealership) return;
+
+    const newComment: Comment = {
+      id: Date.now().toString(),
+      author: currentUser || "User",
+      text,
+      createdAt: new Date().toISOString()
+    };
+
+    const updatedComments = [...(dealership.comments || []), newComment];
+    
+    setItems(prev => prev.map(i => i.id === dealershipId ? { ...i, comments: updatedComments } : i));
+    setCommentInputs(prev => ({ ...prev, [dealershipId]: "" }));
+
+    await supabase.from("dealerships").update({ comments: updatedComments }).eq("id", dealershipId);
+  };
+
+  const handleEditComment = async (dealershipId: string, commentId: string) => {
+    if (!editingCommentText.trim()) return;
+
+    const dealership = items.find(i => i.id === dealershipId);
+    if (!dealership) return;
+
+    const updatedComments = (dealership.comments || []).map(c => 
+      c.id === commentId ? { ...c, text: editingCommentText } : c
+    );
+
+    setItems(prev => prev.map(i => i.id === dealershipId ? { ...i, comments: updatedComments } : i));
+    setEditingCommentId(null);
+    setEditingCommentText("");
+
+    await supabase.from("dealerships").update({ comments: updatedComments }).eq("id", dealershipId);
+  };
+
+  const handleDeleteComment = async (dealershipId: string, commentId: string) => {
+    if (!confirm("Удалить комментарий?")) return;
+
+    const dealership = items.find(i => i.id === dealershipId);
+    if (!dealership) return;
+
+    const updatedComments = (dealership.comments || []).filter(c => c.id !== commentId);
+
+    setItems(prev => prev.map(i => i.id === dealershipId ? { ...i, comments: updatedComments } : i));
+
+    await supabase.from("dealerships").update({ comments: updatedComments }).eq("id", dealershipId);
+  };
+
   // Вычисляем дистанции, фильтруем и сортируем
   const processedItems = items
     .filter((item) => {
@@ -281,14 +356,11 @@ export default function Home() {
       return { ...item, distance };
     })
     .sort((a, b) => {
-      // Если у обоих есть дистанция, сортируем по дистанции
       if (a.distance !== null && b.distance !== null) {
         return a.distance - b.distance;
       }
-      // Если только у одного есть дистанция, он выше
       if (a.distance !== null) return -1;
       if (b.distance !== null) return 1;
-      // Иначе без изменений
       return 0;
     });
 
@@ -367,6 +439,11 @@ export default function Home() {
               <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-4 text-slate-800">
                 <img src="/logo.png" alt="Logo" className="w-10 h-10 object-cover rounded-lg shadow-sm" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                 <span>CRM {selectedCity}</span>
+                {currentUser && (
+                  <span className="text-sm font-medium text-slate-500 ml-2 hidden md:inline-block bg-slate-100 px-3 py-1 rounded-full">
+                    {currentUser}
+                  </span>
+                )}
               </h1>
             </div>
             
@@ -492,9 +569,9 @@ export default function Home() {
               {processedItems.map((item) => (
                 <div
                   key={item.id}
-                  className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 flex flex-col justify-between hover:shadow-md transition"
+                  className="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between hover:shadow-md transition overflow-hidden"
                 >
-                  <div>
+                  <div className="p-5 pb-0">
                     <div className="flex items-start justify-between gap-2 mb-3">
                       <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-slate-100 text-slate-600">
                         {item.category}
@@ -550,8 +627,97 @@ export default function Home() {
                       )}
                     </div>
                   </div>
+                  
+                  {/* Comments Toggle Button */}
+                  <div className="px-5 pb-3">
+                    <button 
+                      onClick={() => setExpandedCommentsId(expandedCommentsId === item.id ? null : item.id)}
+                      className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-800 transition"
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      Комментарии ({(item.comments || []).length})
+                    </button>
+                  </div>
 
-                  <div className="pt-4 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2">
+                  {/* Expanded Comments Section */}
+                  {expandedCommentsId === item.id && (
+                    <div className="bg-slate-50 border-t border-slate-100 p-5 pt-4 flex flex-col gap-3">
+                      <div className="max-h-48 overflow-y-auto space-y-3 pr-1">
+                        {(item.comments || []).map(comment => (
+                          <div key={comment.id} className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs font-bold text-slate-700">{comment.author}</span>
+                              <span className="text-[10px] text-slate-400">
+                                {new Date(comment.createdAt).toLocaleDateString('ru-RU', {hour: '2-digit', minute: '2-digit'})}
+                              </span>
+                            </div>
+                            
+                            {editingCommentId === comment.id ? (
+                              <div className="flex flex-col gap-2 mt-2">
+                                <textarea
+                                  value={editingCommentText}
+                                  onChange={(e) => setEditingCommentText(e.target.value)}
+                                  className="w-full text-sm p-2 border border-blue-300 rounded-lg focus:ring-1 focus:ring-blue-500"
+                                  rows={2}
+                                />
+                                <div className="flex gap-2 justify-end">
+                                  <button onClick={() => setEditingCommentId(null)} className="text-xs text-slate-500 hover:text-slate-700">Отмена</button>
+                                  <button onClick={() => handleEditComment(item.id, comment.id)} className="text-xs bg-blue-600 text-white px-3 py-1 rounded-md">Сохранить</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="group relative">
+                                <p className="text-sm text-slate-600 leading-relaxed break-words">{comment.text}</p>
+                                {comment.author === currentUser && (
+                                  <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition flex gap-1 bg-white pl-2">
+                                    <button 
+                                      onClick={() => {
+                                        setEditingCommentId(comment.id);
+                                        setEditingCommentText(comment.text);
+                                      }} 
+                                      className="text-slate-400 hover:text-blue-600 p-1"
+                                    >
+                                      <Edit className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button 
+                                      onClick={() => handleDeleteComment(item.id, comment.id)} 
+                                      className="text-slate-400 hover:text-red-600 p-1"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        {(item.comments || []).length === 0 && (
+                          <p className="text-xs text-center text-slate-400 py-2">Пока нет комментариев</p>
+                        )}
+                      </div>
+                      
+                      <div className="flex items-center gap-2 mt-2">
+                        <input
+                          type="text"
+                          placeholder="Написать комментарий..."
+                          value={commentInputs[item.id] || ""}
+                          onChange={(e) => setCommentInputs(prev => ({...prev, [item.id]: e.target.value}))}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleAddComment(item.id);
+                          }}
+                          className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <button 
+                          onClick={() => handleAddComment(item.id)}
+                          className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition shadow-sm"
+                        >
+                          <Send className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="p-5 pt-4 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2">
                     <div className="flex gap-3">
                       <button
                         onClick={() => openEditModal(item)}
@@ -596,9 +762,14 @@ export default function Home() {
           {isModalOpen && (
             <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100 space-y-4 max-h-[90vh] overflow-y-auto">
-                <h2 className="text-xl font-bold text-slate-800">
-                  {editingItem ? "Редактировать объект" : "Добавить новый объект"}
-                </h2>
+                <div className="flex justify-between items-center mb-2">
+                  <h2 className="text-xl font-bold text-slate-800">
+                    {editingItem ? "Редактировать объект" : "Добавить новый объект"}
+                  </h2>
+                  <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
 
                 <form onSubmit={handleSubmit} className="space-y-3">
                   <div>
