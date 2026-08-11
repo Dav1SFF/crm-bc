@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Trash2, CheckCircle, ShieldAlert, Activity, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Trash2, CheckCircle, ShieldAlert, Activity, AlertTriangle, Users, BarChart3, Plus } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { logAction } from "@/lib/logger";
 
@@ -23,17 +23,28 @@ interface Dealership {
   category: string;
   phone: string;
   city: string;
+  status: string;
   crm_type: string;
+}
+
+interface User {
+  username: string;
+  role: string;
+  created_at: string;
 }
 
 export default function AdminPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'logs' | 'deletions'>('logs');
+  const [activeTab, setActiveTab] = useState<'logs' | 'deletions' | 'users' | 'analytics'>('logs');
   
   const [logs, setLogs] = useState<ActionLog[]>([]);
   const [pendingDeletions, setPendingDeletions] = useState<Dealership[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [allDealerships, setAllDealerships] = useState<Dealership[]>([]);
   const [currentUser, setCurrentUser] = useState("");
+
+  const [newUserForm, setNewUserForm] = useState({ username: "", password: "", role: "Manager" });
 
   useEffect(() => {
     const authStatus = localStorage.getItem("crm_auth");
@@ -50,13 +61,17 @@ export default function AdminPage() {
 
   const fetchData = async () => {
     setLoading(true);
-    const [logsRes, delRes] = await Promise.all([
+    const [logsRes, delRes, usersRes, dealRes] = await Promise.all([
       supabase.from("action_logs").select("*").order("created_at", { ascending: false }).limit(200),
-      supabase.from("dealerships").select("id, name, category, phone, city, crm_type").eq("pending_deletion", true)
+      supabase.from("dealerships").select("*").eq("pending_deletion", true),
+      supabase.from("users").select("username, role, created_at").order("created_at"),
+      supabase.from("dealerships").select("*")
     ]);
 
     if (logsRes.data) setLogs(logsRes.data);
     if (delRes.data) setPendingDeletions(delRes.data);
+    if (usersRes.data) setUsers(usersRes.data);
+    if (dealRes.data) setAllDealerships(dealRes.data);
     setLoading(false);
   };
 
@@ -64,6 +79,11 @@ export default function AdminPage() {
     if (confirm(`Точно УДАЛИТЬ НАВСЕГДА объект "${item.name}"?`)) {
       await supabase.from("dealerships").delete().eq("id", item.id);
       logAction(currentUser, 'HARD_DELETE', item.id, item.name);
+      
+      // Notify the person who requested it (maybe from logs, or just a general notification)
+      // Since we don't know who requested it easily here, we'll skip targeted for this specific click or target Denis.
+      // Better: we can assume Denis requested it, or log it globally.
+      
       fetchData();
     }
   };
@@ -72,6 +92,32 @@ export default function AdminPage() {
     if (confirm(`Отклонить удаление и вернуть объект "${item.name}" в работу?`)) {
       await supabase.from("dealerships").update({ pending_deletion: false }).eq("id", item.id);
       logAction(currentUser, 'RESTORE', item.id, item.name);
+      fetchData();
+    }
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const { username, password, role } = newUserForm;
+    if (!username || !password) return;
+
+    const { error } = await supabase.from('users').insert([{ username, password, role }]);
+    if (error) {
+      alert("Ошибка при создании пользователя: " + error.message);
+    } else {
+      alert("Пользователь успешно создан!");
+      setNewUserForm({ username: "", password: "", role: "Manager" });
+      fetchData();
+    }
+  };
+
+  const handleDeleteUser = async (username: string) => {
+    if (username === 'Dispatcher') {
+      alert("Нельзя удалить главного администратора!");
+      return;
+    }
+    if (confirm(`Точно удалить пользователя ${username}?`)) {
+      await supabase.from('users').delete().eq('username', username);
       fetchData();
     }
   };
@@ -93,6 +139,22 @@ export default function AdminPage() {
     }
   };
 
+  // Analytics Computations
+  const totalOffline = allDealerships.filter(d => d.crm_type === 'offline').length;
+  const totalCalls = allDealerships.filter(d => d.crm_type === 'calls').length;
+  
+  const statusCounts = allDealerships.reduce((acc, curr) => {
+    acc[curr.status] = (acc[curr.status] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const userActivity = logs.reduce((acc, curr) => {
+    if (!['PAGE_VISIT', 'LOGIN', 'LOGOUT'].includes(curr.action_type)) {
+      acc[curr.user_name] = (acc[curr.user_name] || 0) + 1;
+    }
+    return acc;
+  }, {} as Record<string, number>);
+
   if (loading) {
     return <div className="min-h-screen bg-slate-50 flex items-center justify-center">Загрузка панели...</div>;
   }
@@ -111,21 +173,171 @@ export default function AdminPage() {
             </h1>
           </div>
           
-          <div className="flex bg-slate-100 p-1 rounded-xl">
+          <div className="flex flex-wrap bg-slate-100 p-1 rounded-xl gap-1">
             <button
               onClick={() => setActiveTab('logs')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2 ${activeTab === "logs" ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
             >
-              <Activity className="w-4 h-4" /> Логи действий
+              <Activity className="w-4 h-4" /> Логи
+            </button>
+            <button
+              onClick={() => setActiveTab('analytics')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2 ${activeTab === "analytics" ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
+            >
+              <BarChart3 className="w-4 h-4" /> Аналитика
+            </button>
+            <button
+              onClick={() => setActiveTab('users')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2 ${activeTab === "users" ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
+            >
+              <Users className="w-4 h-4" /> Сотрудники
             </button>
             <button
               onClick={() => setActiveTab('deletions')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2 ${activeTab === "deletions" ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
             >
-              <AlertTriangle className="w-4 h-4" /> На удаление ({pendingDeletions.length})
+              <AlertTriangle className="w-4 h-4" /> Запросы на удаление ({pendingDeletions.length})
             </button>
           </div>
         </header>
+
+        {activeTab === 'analytics' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">Объекты в CRM</h3>
+              <div className="space-y-4">
+                <div className="flex justify-between items-center border-b pb-2">
+                  <span className="font-medium text-slate-600">Оффлайн (Встречи)</span>
+                  <span className="text-xl font-bold text-slate-800">{totalOffline}</span>
+                </div>
+                <div className="flex justify-between items-center pb-2">
+                  <span className="font-medium text-slate-600">Звонки (Холодные)</span>
+                  <span className="text-xl font-bold text-slate-800">{totalCalls}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">Воронка (Статусы)</h3>
+              <div className="space-y-3">
+                {Object.entries(statusCounts).map(([status, count]) => (
+                  <div key={status} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${status === 'Новый' ? 'bg-blue-500' : status === 'В работе' ? 'bg-yellow-500' : status === 'Сделка' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <span className="text-sm font-medium text-slate-700">{status}</span>
+                    </div>
+                    <span className="font-bold text-slate-800">{count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">Активность (Недавняя)</h3>
+              <div className="space-y-3">
+                {Object.entries(userActivity).map(([user, count]) => (
+                  <div key={user} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600">
+                        {user.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="text-sm font-medium text-slate-700">{user}</span>
+                    </div>
+                    <span className="text-sm font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md">{count} действий</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'users' && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="md:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+              <table className="w-full text-left text-sm text-slate-600">
+                <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase font-semibold text-slate-500">
+                  <tr>
+                    <th className="px-6 py-4">Логин</th>
+                    <th className="px-6 py-4">Роль</th>
+                    <th className="px-6 py-4">Дата создания</th>
+                    <th className="px-6 py-4 text-right">Действия</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {users.map(user => (
+                    <tr key={user.username} className="hover:bg-slate-50/50">
+                      <td className="px-6 py-4 font-bold text-slate-800 flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs">
+                          {user.username.charAt(0).toUpperCase()}
+                        </div>
+                        {user.username}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${user.role === 'SuperAdmin' ? 'bg-amber-100 text-amber-700' : user.role === 'Admin' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-700'}`}>
+                          {user.role}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-xs text-slate-400">
+                        {new Date(user.created_at).toLocaleDateString('ru-RU')}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        {user.username !== 'Dispatcher' && (
+                          <button onClick={() => handleDeleteUser(user.username)} className="text-red-500 hover:text-red-700 p-1 transition">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-fit">
+              <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+                <Plus className="w-4 h-4 text-blue-600" />
+                Новый сотрудник
+              </h3>
+              <form onSubmit={handleCreateUser} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Логин</label>
+                  <input
+                    type="text"
+                    required
+                    value={newUserForm.username}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, username: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Пароль</label>
+                  <input
+                    type="text"
+                    required
+                    value={newUserForm.password}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Роль</label>
+                  <select
+                    value={newUserForm.role}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  >
+                    <option value="Manager">Менеджер (Ограниченный доступ)</option>
+                    <option value="Admin">Админ (Полный доступ)</option>
+                    <option value="SuperAdmin">SuperAdmin (С доступом к этой панели)</option>
+                  </select>
+                </div>
+                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-xl text-sm transition">
+                  Создать
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
 
         {activeTab === 'logs' && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">

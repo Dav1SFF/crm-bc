@@ -37,11 +37,7 @@ interface Dealership {
   comments?: Comment[];
 }
 
-const CREDENTIALS = {
-  "Dispatcher": { pass: "517707d1", role: "SuperAdmin" },
-  "Max": { pass: "517707d2", role: "Admin" },
-  "Denis": { pass: "517707d1", role: "Manager" }
-};
+// Users are now fetched from DB
 
 const categoryMap: Record<string, string> = {
   "Офіційні автосалони": "Официальные автосалоны",
@@ -147,17 +143,24 @@ export default function Home() {
     }
   }, [isAuthenticated]);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const { username, password } = loginForm;
-    const cred = CREDENTIALS[username as keyof typeof CREDENTIALS];
-    if (cred && cred.pass === password) {
+    
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('username', username)
+      .eq('password', password)
+      .single();
+
+    if (user && !error) {
       setIsAuthenticated(true);
       setCurrentUser(username);
-      setUserRole(cred.role);
+      setUserRole(user.role);
       localStorage.setItem("crm_auth", "true");
       localStorage.setItem("crm_user", username);
-      localStorage.setItem("crm_role", cred.role);
+      localStorage.setItem("crm_role", user.role);
       setLoginError("");
       logAction(username, 'LOGIN');
     } else {
