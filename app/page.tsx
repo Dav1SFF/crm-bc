@@ -204,6 +204,9 @@ export default function Home() {
       setIsAuthenticated(true);
       setCurrentUser(username);
       setUserRole(user.role);
+      if (user.role === 'Manager') {
+        setActiveCrm('calls');
+      }
       localStorage.setItem("crm_auth", "true");
       localStorage.setItem("crm_user", username);
       localStorage.setItem("crm_role", user.role);
