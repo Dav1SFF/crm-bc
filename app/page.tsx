@@ -789,8 +789,7 @@ export default function Home() {
                       </div>
                     )}
 
-                    <div className="space-y-1.5 mt-3">
-                      {item.distance !== null && (
+                    {item.distance !== null && (
                       <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-semibold mb-3">
                         <Map className="w-3.5 h-3.5" />
                         {item.distance.toFixed(1)} км от вас
