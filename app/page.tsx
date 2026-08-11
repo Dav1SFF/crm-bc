@@ -379,6 +379,7 @@ export default function Home() {
         .from("dealerships")
         .update(payload)
         .eq("id", editingItem.id);
+      logAction(currentUser, 'EDIT_OBJECT', editingItem.id, payload.name, { payload });
     } else {
       await supabase.from("dealerships").insert([payload]);
       logAction(currentUser, 'CREATE_OBJECT', undefined, payload.name, { crm_type: activeCrm });
@@ -426,6 +427,7 @@ export default function Home() {
     setEditingCommentText("");
 
     await supabase.from("dealerships").update({ comments: updatedComments }).eq("id", dealershipId);
+    logAction(currentUser, 'EDIT_COMMENT', dealershipId, dealership.name, { commentId, newText: editingCommentText });
   };
 
   const handleDeleteComment = async (dealershipId: string, commentId: string) => {
@@ -439,6 +441,7 @@ export default function Home() {
     setItems(prev => prev.map(i => i.id === dealershipId ? { ...i, comments: updatedComments } : i));
 
     await supabase.from("dealerships").update({ comments: updatedComments }).eq("id", dealershipId);
+    logAction(currentUser, 'DELETE_COMMENT', dealershipId, dealership.name, { commentId });
   };
 
   // Вычисляем дистанции, фильтруем и сортируем

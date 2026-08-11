@@ -113,6 +113,7 @@ export default function AdminPage() {
     if (error) {
       alert("Ошибка при создании пользователя: " + error.message);
     } else {
+      logAction(currentUser, 'CREATE_USER', undefined, username, { role });
       alert("Пользователь успешно создан!");
       setNewUserForm({ username: "", password: "", role: "Manager" });
       fetchData();
@@ -126,6 +127,7 @@ export default function AdminPage() {
     }
     if (confirm(`Точно удалить пользователя ${username}?`)) {
       await supabase.from('users').delete().eq('username', username);
+      logAction(currentUser, 'DELETE_USER', undefined, username);
       fetchData();
     }
   };
@@ -143,6 +145,11 @@ export default function AdminPage() {
       case 'ADD_COMMENT': return <span className="text-sky-600 font-semibold">Комментарий</span>;
       case 'ADD_REMINDER': return <span className="text-indigo-600 font-semibold">Напоминание</span>;
       case 'ADD_CITY': return <span className="text-teal-600 font-semibold">Новый город</span>;
+      case 'EDIT_OBJECT': return <span className="text-blue-500 font-semibold">Редактирование</span>;
+      case 'EDIT_COMMENT': return <span className="text-sky-500 font-semibold">Изменён комментарий</span>;
+      case 'DELETE_COMMENT': return <span className="text-red-500 font-semibold">Удалён комментарий</span>;
+      case 'CREATE_USER': return <span className="text-green-500 font-bold">Создан сотрудник</span>;
+      case 'DELETE_USER': return <span className="text-red-600 font-bold">Удалён сотрудник</span>;
       default: return <span>{type}</span>;
     }
   };

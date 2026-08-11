@@ -9,9 +9,14 @@ export type ActionType =
   | 'RESTORE'
   | 'UPDATE_STATUS'
   | 'ADD_COMMENT'
+  | 'EDIT_COMMENT'
+  | 'DELETE_COMMENT'
   | 'ADD_REMINDER'
   | 'ADD_CITY'
-  | 'PAGE_VISIT';
+  | 'PAGE_VISIT'
+  | 'EDIT_OBJECT'
+  | 'CREATE_USER'
+  | 'DELETE_USER';
 
 export async function logAction(
   userName: string,
