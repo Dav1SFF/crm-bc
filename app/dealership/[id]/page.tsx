@@ -8,6 +8,7 @@ import {
   Car, Building2, Edit, Trash2, Send, Clock, MapPin, Globe, MessageSquare, Bell, UserPlus
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { logAction } from "@/lib/logger";
 
 type Status = "Новый" | "В работе" | "Сделка" | "Отказ";
 type ReminderType = "Дзвінок" | "Зустріч" | "Повідомлення" | "Інше";
@@ -51,6 +52,7 @@ export default function DealershipPage() {
   
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState<string>("User");
+  const [userRole, setUserRole] = useState<string>("");
   
   const [item, setItem] = useState<Dealership | null>(null);
   const [loading, setLoading] = useState(true);
@@ -65,11 +67,14 @@ export default function DealershipPage() {
   useEffect(() => {
     const authStatus = localStorage.getItem("crm_auth");
     const user = localStorage.getItem("crm_user");
+    const role = localStorage.getItem("crm_role");
     if (authStatus !== "true") {
       router.push("/");
     } else {
       setIsAuthenticated(true);
       if (user) setCurrentUser(user);
+      if (role) setUserRole(role);
+      if (user) logAction(user, 'PAGE_VISIT', id as string, undefined, { path: `/dealership/${id}` });
     }
   }, [router]);
 
@@ -115,6 +120,7 @@ export default function DealershipPage() {
     if (!item) return;
     setItem({ ...item, status: newStatus });
     await supabase.from("dealerships").update({ status: newStatus }).eq("id", id);
+    logAction(currentUser, 'UPDATE_STATUS', id, item.name, { newStatus });
   };
 
   const handleAddComment = async () => {
@@ -132,6 +138,7 @@ export default function DealershipPage() {
     setNewComment("");
 
     await supabase.from("dealerships").update({ comments: updatedComments }).eq("id", id);
+    logAction(currentUser, 'ADD_COMMENT', id, item.name, { text: comment.text });
   };
 
   const handleAddReminder = async () => {
@@ -151,6 +158,7 @@ export default function DealershipPage() {
     setItem({ ...item, reminders: updatedReminders });
     
     await supabase.from("dealerships").update({ reminders: updatedReminders }).eq("id", id);
+    logAction(currentUser, 'ADD_REMINDER', id, item.name, { type: reminderType, date: reminderDate });
 
     try {
       const formattedTime = new Date(reminder.date).toLocaleString('ru-RU', { timeZone: 'Europe/Kyiv' });

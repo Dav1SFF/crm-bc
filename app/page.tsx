@@ -6,9 +6,10 @@ import Link from "next/link";
 import { 
   Plus, Search, Trash2, Edit, Phone, Globe, MapPin, 
   Car, Building2, CheckCircle, Clock, XCircle, AlertCircle, RefreshCw, 
-  Map, Navigation, MessageSquare, Send, X
+  Map, Navigation, MessageSquare, Send, X, ShieldAlert, PhoneCall
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { logAction } from "@/lib/logger";
 
 type Category = "Официальные автосалоны" | "Авторынки и площадки" | "Автовыкуп";
 type Status = "Новый" | "В работе" | "Сделка" | "Отказ";
@@ -37,8 +38,9 @@ interface Dealership {
 }
 
 const CREDENTIALS = {
-  "Dispatcher": "517707d1",
-  "Max": "517707d2"
+  "Dispatcher": { pass: "517707d1", role: "SuperAdmin" },
+  "Max": { pass: "517707d2", role: "Admin" },
+  "Denis": { pass: "517707d1", role: "Manager" }
 };
 
 const categoryMap: Record<string, string> = {
@@ -71,11 +73,14 @@ function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon
 export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState<string>("");
+  const [userRole, setUserRole] = useState<string>("");
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [loginError, setLoginError] = useState("");
 
   const [items, setItems] = useState<Dealership[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeCrm, setActiveCrm] = useState<'offline' | 'calls'>('offline');
+  const [dbCities, setDbCities] = useState<{name: string}[]>([]);
   
   // Фільтри
   const [search, setSearch] = useState("");
@@ -110,9 +115,14 @@ export default function Home() {
   useEffect(() => {
     const authStatus = localStorage.getItem("crm_auth");
     const user = localStorage.getItem("crm_user");
+    const role = localStorage.getItem("crm_role");
     if (authStatus === "true") {
       setIsAuthenticated(true);
       if (user) setCurrentUser(user);
+      if (role) setUserRole(role);
+      
+      // Логируем посещение
+      if (user) logAction(user, 'PAGE_VISIT', undefined, undefined, { path: '/' });
     }
   }, []);
 
@@ -135,22 +145,29 @@ export default function Home() {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     const { username, password } = loginForm;
-    if (CREDENTIALS[username as keyof typeof CREDENTIALS] === password) {
+    const cred = CREDENTIALS[username as keyof typeof CREDENTIALS];
+    if (cred && cred.pass === password) {
       setIsAuthenticated(true);
       setCurrentUser(username);
+      setUserRole(cred.role);
       localStorage.setItem("crm_auth", "true");
       localStorage.setItem("crm_user", username);
+      localStorage.setItem("crm_role", cred.role);
       setLoginError("");
+      logAction(username, 'LOGIN');
     } else {
       setLoginError("Неверный логин или пароль");
     }
   };
 
   const handleLogout = () => {
+    logAction(currentUser, 'LOGOUT');
     setIsAuthenticated(false);
     setCurrentUser("");
+    setUserRole("");
     localStorage.removeItem("crm_auth");
     localStorage.removeItem("crm_user");
+    localStorage.removeItem("crm_role");
   };
 
   const fetchItems = async () => {
@@ -158,6 +175,8 @@ export default function Home() {
     const { data, error } = await supabase
       .from("dealerships")
       .select("*")
+      .eq("crm_type", activeCrm)
+      .neq("pending_deletion", true)
       .order("created_at", { ascending: true });
 
     if (!error && data) {
@@ -177,6 +196,11 @@ export default function Home() {
     if (!isAuthenticated) return;
     
     fetchItems();
+    if (activeCrm === 'calls') {
+      supabase.from("cities").select("name").order("name").then(({data}) => {
+        if (data) setDbCities(data);
+      });
+    }
 
     const channel = supabase
       .channel("realtime_dealerships")
@@ -192,20 +216,30 @@ export default function Home() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, activeCrm]);
 
-  const handleDelete = async (id: string) => {
-    if (confirm("Вы уверены, что хотите удалить этот объект?")) {
-      await supabase.from("dealerships").delete().eq("id", id);
-      fetchItems();
+  const handleDelete = async (item: Dealership) => {
+    if (userRole === "Manager") {
+      if (confirm("Отправить запрос на удаление этого объекта главному администратору?")) {
+        await supabase.from("dealerships").update({ pending_deletion: true }).eq("id", item.id);
+        logAction(currentUser, 'DELETE_REQUEST', item.id, item.name);
+        fetchItems();
+      }
+    } else {
+      if (confirm("Вы уверены, что хотите удалить этот объект НАВСЕГДА?")) {
+        await supabase.from("dealerships").delete().eq("id", item.id);
+        logAction(currentUser, 'HARD_DELETE', item.id, item.name);
+        fetchItems();
+      }
     }
   };
 
-  const handleStatusChange = async (id: string, newStatus: Status) => {
+  const handleStatusChange = async (id: string, name: string, newStatus: Status) => {
     setItems((prev) =>
       prev.map((item) => (item.id === id ? { ...item, status: newStatus } : item))
     );
     await supabase.from("dealerships").update({ status: newStatus }).eq("id", id);
+    logAction(currentUser, 'UPDATE_STATUS', id, name, { newStatus });
   };
 
   const openAddModal = () => {
@@ -263,7 +297,8 @@ export default function Home() {
       notes: formData.notes,
       city: formData.city,
       lat,
-      lng
+      lng,
+      crm_type: activeCrm
     };
 
     if (editingItem) {
@@ -273,6 +308,7 @@ export default function Home() {
         .eq("id", editingItem.id);
     } else {
       await supabase.from("dealerships").insert([payload]);
+      logAction(currentUser, 'CREATE_OBJECT', undefined, payload.name, { crm_type: activeCrm });
     }
     setIsModalOpen(false);
     fetchItems();
@@ -436,34 +472,77 @@ export default function Home() {
         <div className="max-w-7xl mx-auto space-y-6">
           {/* Шапка */}
           <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-            <div>
+            <div className="flex flex-col gap-3">
               <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-4 text-slate-800">
                 <img src="/logo.png" alt="Logo" className="w-10 h-10 object-cover rounded-lg shadow-sm" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                 <span>CRM {selectedCity}</span>
                 {currentUser && (
                   <span className="text-sm font-medium text-slate-500 ml-2 hidden md:inline-block bg-slate-100 px-3 py-1 rounded-full">
-                    {currentUser}
+                    {currentUser} ({userRole})
                   </span>
                 )}
               </h1>
+              
+              {/* CRM Type Tabs */}
+              <div className="flex bg-slate-100 p-1 rounded-xl w-fit">
+                <button
+                  onClick={() => setActiveCrm('offline')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition ${activeCrm === "offline" ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
+                >
+                  <MapPin className="w-4 h-4 inline-block mr-1 -mt-0.5" />
+                  Встречи (Оффлайн)
+                </button>
+                <button
+                  onClick={() => setActiveCrm('calls')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition ${activeCrm === "calls" ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
+                >
+                  <PhoneCall className="w-4 h-4 inline-block mr-1 -mt-0.5" />
+                  Холодные звонки
+                </button>
+              </div>
             </div>
             
-            <div className="flex bg-slate-100 p-1 rounded-xl">
-              <button
-                onClick={() => setSelectedCity("Белая Церковь")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${selectedCity === "Белая Церковь" ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
-              >
-                Белая Церковь
-              </button>
-              <button
-                onClick={() => setSelectedCity("Киев")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${selectedCity === "Киев" ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
-              >
-                Киев
-              </button>
+            <div className="flex bg-slate-100 p-1 rounded-xl overflow-x-auto max-w-full">
+              {activeCrm === 'offline' ? (
+                <>
+                  <button
+                    onClick={() => setSelectedCity("Белая Церковь" as City)}
+                    className={`whitespace-nowrap px-4 py-2 rounded-lg text-sm font-medium transition ${selectedCity === "Белая Церковь" ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
+                  >
+                    Белая Церковь
+                  </button>
+                  <button
+                    onClick={() => setSelectedCity("Киев" as City)}
+                    className={`whitespace-nowrap px-4 py-2 rounded-lg text-sm font-medium transition ${selectedCity === "Киев" ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
+                  >
+                    Киев
+                  </button>
+                </>
+              ) : (
+                <>
+                  {dbCities.map((city) => (
+                    <button
+                      key={city.name}
+                      onClick={() => setSelectedCity(city.name as City)}
+                      className={`whitespace-nowrap px-4 py-2 rounded-lg text-sm font-medium transition ${selectedCity === city.name ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
+                    >
+                      {city.name}
+                    </button>
+                  ))}
+                  {dbCities.length === 0 && (
+                    <span className="px-4 py-2 text-sm text-slate-400">Нет добавленных городов</span>
+                  )}
+                </>
+              )}
             </div>
 
             <div className="flex items-center gap-3">
+              {userRole === 'SuperAdmin' && (
+                <Link href="/admin" className="hidden sm:flex items-center gap-1 text-sm font-medium text-amber-600 hover:text-amber-700 bg-amber-50 px-3 py-2 rounded-lg transition">
+                  <ShieldAlert className="w-4 h-4" />
+                  Админ-панель
+                </Link>
+              )}
               <button
                 onClick={handleLogout}
                 className="text-sm font-medium text-slate-500 hover:text-slate-800 transition"
@@ -579,7 +658,7 @@ export default function Home() {
                       </span>
                       <select
                         value={item.status}
-                        onChange={(e) => handleStatusChange(item.id, e.target.value as Status)}
+                        onChange={(e) => handleStatusChange(item.id, item.name, e.target.value as Status)}
                         className={`text-xs font-medium px-2.5 py-1 rounded-md border focus:outline-none cursor-pointer ${getStatusBadge(
                           item.status
                         )}`}
@@ -729,7 +808,7 @@ export default function Home() {
                         <Edit className="w-3.5 h-3.5" /> Редактировать
                       </button>
                       <button
-                        onClick={() => handleDelete(item.id)}
+                        onClick={() => handleDelete(item)}
                         className="flex items-center gap-1 text-xs text-slate-400 hover:text-red-600 font-medium transition"
                       >
                         <Trash2 className="w-3.5 h-3.5" /> Удалить
@@ -792,16 +871,48 @@ export default function Home() {
                     <label className="block text-xs font-semibold text-slate-600 mb-1">
                       Город
                     </label>
-                    <select
-                      value={formData.city}
-                      onChange={(e) =>
-                        setFormData({ ...formData, city: e.target.value as City })
-                      }
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="Белая Церковь">Белая Церковь</option>
-                      <option value="Киев">Киев</option>
-                    </select>
+                    {activeCrm === 'offline' ? (
+                      <select
+                        value={formData.city}
+                        onChange={(e) =>
+                          setFormData({ ...formData, city: e.target.value as City })
+                        }
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="Белая Церковь">Белая Церковь</option>
+                        <option value="Киев">Киев</option>
+                      </select>
+                    ) : (
+                      <div className="flex gap-2">
+                        <select
+                          value={formData.city}
+                          onChange={(e) =>
+                            setFormData({ ...formData, city: e.target.value as City })
+                          }
+                          className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          {dbCities.length === 0 && <option value="">Сначала добавьте город</option>}
+                          {dbCities.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const newCity = prompt("Введите название нового города:");
+                            if (newCity) {
+                              await supabase.from("cities").insert([{ name: newCity, created_by: currentUser }]);
+                              logAction(currentUser, 'ADD_CITY', undefined, newCity);
+                              const { data } = await supabase.from("cities").select("name").order("name");
+                              if (data) setDbCities(data);
+                              setFormData({ ...formData, city: newCity as City });
+                              setSelectedCity(newCity as City);
+                            }
+                          }}
+                          className="px-3 py-2 bg-slate-200 hover:bg-slate-300 rounded-xl text-sm font-medium transition"
+                        >
+                          + Новый
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div>
