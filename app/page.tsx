@@ -408,6 +408,7 @@ export default function Home() {
     setCommentInputs(prev => ({ ...prev, [dealershipId]: "" }));
 
     await supabase.from("dealerships").update({ comments: updatedComments }).eq("id", dealershipId);
+    logAction(currentUser, 'ADD_COMMENT', dealershipId, dealership.name, { text: newComment.text });
   };
 
   const handleEditComment = async (dealershipId: string, commentId: string) => {
