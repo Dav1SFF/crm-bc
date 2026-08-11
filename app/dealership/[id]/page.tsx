@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { 
   ArrowLeft, Phone, Calendar, User, 
-  Car, Building2, Edit, Trash2, Send, Clock, MapPin, Globe, MessageSquare, Bell, UserPlus
+  Car, Building2, Edit, Trash2, Send, Clock, MapPin, Globe, MessageSquare, Bell, UserPlus, X
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { logAction } from "@/lib/logger";
@@ -43,6 +43,7 @@ interface Dealership {
   created_at: string;
   comments?: Comment[];
   reminders?: Reminder[];
+  tags?: string[];
 }
 
 export default function DealershipPage() {
@@ -121,6 +122,25 @@ export default function DealershipPage() {
     setItem({ ...item, status: newStatus });
     await supabase.from("dealerships").update({ status: newStatus }).eq("id", id);
     logAction(currentUser, 'UPDATE_STATUS', id, item.name, { newStatus });
+  };
+
+  const handleAddTag = async (tag: string) => {
+    if (!item) return;
+    const currentTags = item.tags || [];
+    if (currentTags.includes(tag.trim())) return;
+    
+    const newTags = [...currentTags, tag.trim()];
+    setItem({ ...item, tags: newTags });
+    await supabase.from("dealerships").update({ tags: newTags }).eq("id", id);
+    logAction(currentUser, 'UPDATE_STATUS', id, item.name, { action: 'add_tag', tag });
+  };
+
+  const handleRemoveTag = async (tag: string) => {
+    if (!item) return;
+    const newTags = (item.tags || []).filter(t => t !== tag);
+    setItem({ ...item, tags: newTags });
+    await supabase.from("dealerships").update({ tags: newTags }).eq("id", id);
+    logAction(currentUser, 'UPDATE_STATUS', id, item.name, { action: 'remove_tag', tag });
   };
 
   const handleAddComment = async () => {
@@ -212,6 +232,26 @@ export default function DealershipPage() {
                   {item.category}
                 </span>
               </h1>
+              
+              <div className="flex flex-wrap gap-2 mt-2">
+                {item.tags?.map(tag => (
+                  <span key={tag} className="flex items-center gap-1 px-2 py-1 text-xs font-bold uppercase rounded-md bg-blue-100 text-blue-700 border border-blue-200">
+                    {tag}
+                    <button onClick={() => handleRemoveTag(tag)} className="hover:text-red-500 text-blue-400">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+                <button 
+                  onClick={() => {
+                    const newTag = prompt("Введите новый тег:");
+                    if (newTag) handleAddTag(newTag);
+                  }}
+                  className="px-2 py-1 text-xs font-bold uppercase rounded-md bg-slate-100 text-slate-500 border border-slate-200 hover:bg-slate-200 transition"
+                >
+                  + Тег
+                </button>
+              </div>
             </div>
           </div>
         </header>

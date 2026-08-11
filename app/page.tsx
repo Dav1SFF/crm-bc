@@ -6,7 +6,7 @@ import Link from "next/link";
 import { 
   Plus, Search, Trash2, Edit, Phone, Globe, MapPin, 
   Car, Building2, CheckCircle, Clock, XCircle, AlertCircle, RefreshCw, 
-  Map, Navigation, MessageSquare, Send, X, ShieldAlert, PhoneCall
+  Map, Navigation, MessageSquare, Send, X, ShieldAlert, PhoneCall, Bell
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { logAction } from "@/lib/logger";
@@ -22,6 +22,14 @@ interface Comment {
   createdAt: string;
 }
 
+interface Notification {
+  id: string;
+  message: string;
+  link: string | null;
+  is_read: boolean;
+  created_at: string;
+}
+
 interface Dealership {
   id: string;
   name: string;
@@ -35,6 +43,7 @@ interface Dealership {
   lat?: number;
   lng?: number;
   comments?: Comment[];
+  tags?: string[];
 }
 
 // Users are now fetched from DB
@@ -77,6 +86,9 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [activeCrm, setActiveCrm] = useState<'offline' | 'calls'>('offline');
   const [dbCities, setDbCities] = useState<{name: string}[]>([]);
+  
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
   
   // Фільтри
   const [search, setSearch] = useState("");
@@ -143,6 +155,37 @@ export default function Home() {
     }
   }, [isAuthenticated]);
 
+  useEffect(() => {
+    if (!isAuthenticated || !currentUser) return;
+    
+    const fetchNotifications = async () => {
+      const { data } = await supabase
+        .from("notifications")
+        .select("*")
+        .eq("user_name", currentUser)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (data) setNotifications(data);
+    };
+
+    fetchNotifications();
+
+    const channel = supabase
+      .channel("realtime_notifications")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "notifications", filter: `user_name=eq.${currentUser}` },
+        () => {
+          fetchNotifications();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isAuthenticated, currentUser]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const { username, password } = loginForm;
@@ -176,6 +219,16 @@ export default function Home() {
     localStorage.removeItem("crm_auth");
     localStorage.removeItem("crm_user");
     localStorage.removeItem("crm_role");
+  };
+
+  const handleNotificationClick = async (notif: Notification) => {
+    if (!notif.is_read) {
+      await supabase.from("notifications").update({ is_read: true }).eq("id", notif.id);
+      setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, is_read: true } : n));
+    }
+    if (notif.link) {
+      window.location.href = notif.link;
+    }
   };
 
   const fetchItems = async () => {
@@ -231,6 +284,12 @@ export default function Home() {
       if (confirm("Отправить запрос на удаление этого объекта главному администратору?")) {
         await supabase.from("dealerships").update({ pending_deletion: true }).eq("id", item.id);
         logAction(currentUser, 'DELETE_REQUEST', item.id, item.name);
+        // Отправляем уведомление СуперАдмину
+        await supabase.from("notifications").insert([{
+          user_name: 'Dispatcher',
+          message: `Менеджер ${currentUser} запрашивает удаление объекта "${item.name}"`,
+          link: '/admin'
+        }]);
         fetchItems();
       }
     } else {
@@ -381,7 +440,8 @@ export default function Home() {
       const matchesSearch =
         item.name.toLowerCase().includes(search.toLowerCase()) ||
         item.address.toLowerCase().includes(search.toLowerCase()) ||
-        item.phone.toLowerCase().includes(search.toLowerCase());
+        item.phone.toLowerCase().includes(search.toLowerCase()) ||
+        (item.tags && item.tags.some(tag => tag.toLowerCase().includes(search.toLowerCase())));
 
       const matchesCategory =
         selectedCategory === "Все" || item.category === selectedCategory;
@@ -546,9 +606,42 @@ export default function Home() {
               )}
             </div>
 
-            <div className="flex items-center gap-3">
-              {userRole === 'SuperAdmin' && (
-                <Link href="/admin" className="hidden sm:flex items-center gap-1 text-sm font-medium text-amber-600 hover:text-amber-700 bg-amber-50 px-3 py-2 rounded-lg transition">
+              <div className="flex items-center gap-2 md:gap-4 relative">
+                <div className="relative">
+                  <button 
+                    onClick={() => setShowNotifications(!showNotifications)}
+                    className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full transition relative"
+                  >
+                    <Bell className="w-5 h-5" />
+                    {notifications.filter(n => !n.is_read).length > 0 && (
+                      <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+                    )}
+                  </button>
+                  {showNotifications && (
+                    <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden z-50">
+                      <div className="p-3 border-b border-slate-100 font-bold text-sm text-slate-800">Уведомления</div>
+                      <div className="max-h-64 overflow-y-auto">
+                        {notifications.length === 0 ? (
+                          <div className="p-4 text-center text-xs text-slate-400">Нет новых уведомлений</div>
+                        ) : (
+                          notifications.map(notif => (
+                            <div 
+                              key={notif.id} 
+                              onClick={() => handleNotificationClick(notif)}
+                              className={`p-3 text-xs border-b border-slate-50 cursor-pointer transition ${notif.is_read ? 'text-slate-500 bg-white hover:bg-slate-50' : 'text-slate-800 bg-blue-50/50 hover:bg-blue-50'}`}
+                            >
+                              <div className="font-medium mb-1">{notif.message}</div>
+                              <div className="text-[10px] text-slate-400">{new Date(notif.created_at).toLocaleString('ru-RU')}</div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {userRole === 'SuperAdmin' && (
+                  <Link href="/admin" className="hidden sm:flex items-center gap-1 text-sm font-medium text-amber-600 hover:text-amber-700 bg-amber-50 px-3 py-2 rounded-lg transition">
                   <ShieldAlert className="w-4 h-4" />
                   Админ-панель
                 </Link>
@@ -680,13 +773,24 @@ export default function Home() {
                       </select>
                     </div>
 
-                    <Link href={`/dealership/${item.id}`}>
-                      <h3 className="font-bold text-slate-800 text-lg mb-2 leading-snug hover:text-blue-600 transition">
+                    <h3 className="text-sm font-bold text-slate-800 leading-tight">
+                      <Link href={`/dealership/${item.id}`} className="hover:text-blue-600 transition">
                         {item.name}
-                      </h3>
-                    </Link>
+                      </Link>
+                    </h3>
                     
-                    {item.distance !== null && (
+                    {item.tags && item.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {item.tags.map(tag => (
+                          <span key={tag} className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded-md bg-blue-50 text-blue-600 border border-blue-100">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5 mt-3">
+                      {item.distance !== null && (
                       <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-semibold mb-3">
                         <Map className="w-3.5 h-3.5" />
                         {item.distance.toFixed(1)} км от вас

@@ -80,9 +80,10 @@ export default function AdminPage() {
       await supabase.from("dealerships").delete().eq("id", item.id);
       logAction(currentUser, 'HARD_DELETE', item.id, item.name);
       
-      // Notify the person who requested it (maybe from logs, or just a general notification)
-      // Since we don't know who requested it easily here, we'll skip targeted for this specific click or target Denis.
-      // Better: we can assume Denis requested it, or log it globally.
+      await supabase.from("notifications").insert([{
+        user_name: 'Denis',
+        message: `Главный администратор удалил объект "${item.name}" по вашему запросу.`
+      }]);
       
       fetchData();
     }
@@ -92,6 +93,13 @@ export default function AdminPage() {
     if (confirm(`Отклонить удаление и вернуть объект "${item.name}" в работу?`)) {
       await supabase.from("dealerships").update({ pending_deletion: false }).eq("id", item.id);
       logAction(currentUser, 'RESTORE', item.id, item.name);
+      
+      await supabase.from("notifications").insert([{
+        user_name: 'Denis',
+        message: `Главный администратор отклонил удаление объекта "${item.name}". Он возвращен в работу.`,
+        link: `/dealership/${item.id}`
+      }]);
+
       fetchData();
     }
   };
