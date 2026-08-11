@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, use } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { 
   ArrowLeft, Phone, Calendar, User, 
@@ -44,9 +44,10 @@ interface Dealership {
   reminders?: Reminder[];
 }
 
-export default function DealershipPage({ params }: { params: Promise<{ id: string }> }) {
+export default function DealershipPage() {
   const router = useRouter();
-  const { id } = use(params);
+  const params = useParams();
+  const id = params?.id as string;
   
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState<string>("User");
@@ -377,7 +378,7 @@ export default function DealershipPage({ params }: { params: Promise<{ id: strin
               
               <div className="flex items-center gap-3 p-2 border border-slate-100 rounded-xl bg-slate-50">
                 <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
-                  {currentUser[0].toUpperCase()}
+                  {currentUser.charAt(0).toUpperCase()}
                 </div>
                 <span className="text-sm font-semibold text-slate-800">{currentUser}</span>
               </div>
