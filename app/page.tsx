@@ -539,82 +539,28 @@ export default function Home() {
       <div className="flex-1 p-4 md:p-8">
         <div className="max-w-7xl mx-auto space-y-6">
           {/* Шапка */}
-          <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-            <div className="flex flex-col gap-3">
-              <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-4 text-slate-800">
+          <header className="bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-5">
+            {/* Верхний ряд: Название и кнопки */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <h1 className="text-2xl font-bold flex items-center gap-3 text-slate-800">
                 <img src="/logo.png" alt="Logo" className="w-10 h-10 object-cover rounded-lg shadow-sm" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                 <span>CRM {selectedCity}</span>
                 {currentUser && (
-                  <span className="text-sm font-medium text-slate-500 ml-2 hidden md:inline-block bg-slate-100 px-3 py-1 rounded-full">
-                    {currentUser} ({userRole})
+                  <span className="text-xs font-semibold text-slate-500 hidden md:inline-block bg-slate-100 px-3 py-1.5 rounded-full whitespace-nowrap">
+                    {currentUser} <span className="opacity-70 font-normal">({userRole})</span>
                   </span>
                 )}
               </h1>
-              
-              {/* CRM Type Tabs */}
-              <div className="flex bg-slate-100 p-1 rounded-xl w-fit">
-                {userRole !== 'Manager' && (
-                  <button
-                    onClick={() => setActiveCrm('offline')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${activeCrm === "offline" ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
-                  >
-                    <MapPin className="w-4 h-4 inline-block mr-1 -mt-0.5" />
-                    Встречи (Оффлайн)
-                  </button>
-                )}
-                <button
-                  onClick={() => setActiveCrm('calls')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition ${activeCrm === "calls" ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
-                >
-                  <PhoneCall className="w-4 h-4 inline-block mr-1 -mt-0.5" />
-                  Холодные звонки
-                </button>
-              </div>
-            </div>
-            
-            <div className="flex bg-slate-100 p-1 rounded-xl overflow-x-auto max-w-full">
-              {activeCrm === 'offline' ? (
-                <>
-                  <button
-                    onClick={() => setSelectedCity("Белая Церковь" as City)}
-                    className={`whitespace-nowrap px-4 py-2 rounded-lg text-sm font-medium transition ${selectedCity === "Белая Церковь" ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
-                  >
-                    Белая Церковь
-                  </button>
-                  <button
-                    onClick={() => setSelectedCity("Киев" as City)}
-                    className={`whitespace-nowrap px-4 py-2 rounded-lg text-sm font-medium transition ${selectedCity === "Киев" ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
-                  >
-                    Киев
-                  </button>
-                </>
-              ) : (
-                <>
-                  {dbCities.map((city) => (
-                    <button
-                      key={city.name}
-                      onClick={() => setSelectedCity(city.name as City)}
-                      className={`whitespace-nowrap px-4 py-2 rounded-lg text-sm font-medium transition ${selectedCity === city.name ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
-                    >
-                      {city.name}
-                    </button>
-                  ))}
-                  {dbCities.length === 0 && (
-                    <span className="px-4 py-2 text-sm text-slate-400">Нет добавленных городов</span>
-                  )}
-                </>
-              )}
-            </div>
 
-              <div className="flex items-center gap-2 md:gap-4 relative">
+              <div className="flex items-center gap-2 md:gap-3 flex-wrap">
                 <div className="relative">
                   <button 
                     onClick={() => setShowNotifications(!showNotifications)}
-                    className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full transition relative"
+                    className="p-2.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 bg-slate-50 border border-slate-100 rounded-xl transition relative"
                   >
                     <Bell className="w-5 h-5" />
                     {notifications.filter(n => !n.is_read).length > 0 && (
-                      <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+                      <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
                     )}
                   </button>
                   {showNotifications && (
@@ -641,23 +587,82 @@ export default function Home() {
                 </div>
 
                 {userRole === 'SuperAdmin' && (
-                  <Link href="/admin" className="hidden sm:flex items-center gap-1 text-sm font-medium text-amber-600 hover:text-amber-700 bg-amber-50 px-3 py-2 rounded-lg transition">
-                  <ShieldAlert className="w-4 h-4" />
-                  Админ-панель
-                </Link>
-              )}
-              <button
-                onClick={handleLogout}
-                className="text-sm font-medium text-slate-500 hover:text-slate-800 transition"
-              >
-                Выйти
-              </button>
-              <button
-                onClick={openAddModal}
-                className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl transition font-medium shadow-sm hover:shadow"
-              >
-                <Plus className="w-5 h-5" /> Добавить объект
-              </button>
+                  <Link href="/admin" className="hidden sm:flex items-center gap-1.5 text-sm font-semibold text-amber-700 bg-amber-50 border border-amber-100 px-4 py-2.5 rounded-xl hover:bg-amber-100 transition">
+                    <ShieldAlert className="w-4 h-4" />
+                    Админ-панель
+                  </Link>
+                )}
+                
+                <button
+                  onClick={handleLogout}
+                  className="text-sm font-semibold text-slate-500 bg-slate-50 border border-slate-100 px-4 py-2.5 rounded-xl hover:bg-slate-100 hover:text-slate-800 transition"
+                >
+                  Выйти
+                </button>
+                
+                <button
+                  onClick={openAddModal}
+                  className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl transition font-medium shadow-sm hover:shadow"
+                >
+                  <Plus className="w-5 h-5" /> Добавить
+                </button>
+              </div>
+            </div>
+
+            {/* Нижний ряд: Фильтры */}
+            <div className="flex flex-col sm:flex-row items-center gap-3 pt-2 border-t border-slate-100">
+              <div className="flex bg-slate-100 p-1 rounded-xl w-full sm:w-fit shrink-0">
+                {userRole !== 'Manager' && (
+                  <button
+                    onClick={() => setActiveCrm('offline')}
+                    className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 ${activeCrm === "offline" ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
+                  >
+                    <MapPin className="w-4 h-4" />
+                    Оффлайн
+                  </button>
+                )}
+                <button
+                  onClick={() => setActiveCrm('calls')}
+                  className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 ${activeCrm === "calls" ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
+                >
+                  <PhoneCall className="w-4 h-4" />
+                  Звонки
+                </button>
+              </div>
+              
+              <div className="flex bg-slate-100 p-1 rounded-xl overflow-x-auto w-full sm:w-fit custom-scrollbar">
+                {activeCrm === 'offline' ? (
+                  <>
+                    <button
+                      onClick={() => setSelectedCity("Белая Церковь" as City)}
+                      className={`whitespace-nowrap px-4 py-2 rounded-lg text-sm font-medium transition ${selectedCity === "Белая Церковь" ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
+                    >
+                      Белая Церковь
+                    </button>
+                    <button
+                      onClick={() => setSelectedCity("Киев" as City)}
+                      className={`whitespace-nowrap px-4 py-2 rounded-lg text-sm font-medium transition ${selectedCity === "Киев" ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
+                    >
+                      Киев
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {dbCities.map((city) => (
+                      <button
+                        key={city.name}
+                        onClick={() => setSelectedCity(city.name as City)}
+                        className={`whitespace-nowrap px-4 py-2 rounded-lg text-sm font-medium transition ${selectedCity === city.name ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
+                      >
+                        {city.name}
+                      </button>
+                    ))}
+                    {dbCities.length === 0 && (
+                      <span className="px-4 py-2 text-sm text-slate-400">Нет городов</span>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           </header>
 
