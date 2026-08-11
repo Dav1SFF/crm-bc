@@ -40,13 +40,13 @@ export async function GET(request: Request) {
 
       // Check 3 hours (180 mins)
       if (diffMinutes <= 180 && diffMinutes > 60 && !reminder.notified_3h) {
-        await sendTelegramAlert(dealership.name, reminder, "через 3 часа (или менее)");
+        await sendTelegramAlert(dealership.name, reminder, `через ${Math.ceil(diffMinutes / 60)} ч.`);
         updatedReminders[i].notified_3h = true;
         modified = true;
       }
       // Check 1 hour (60 mins)
       else if (diffMinutes <= 60 && diffMinutes > 15 && !reminder.notified_1h) {
-        await sendTelegramAlert(dealership.name, reminder, "через час");
+        await sendTelegramAlert(dealership.name, reminder, `через ${Math.ceil(diffMinutes)} мин.`);
         updatedReminders[i].notified_1h = true;
         // If we missed the 3h one, mark it as well
         updatedReminders[i].notified_3h = true;
@@ -54,7 +54,7 @@ export async function GET(request: Request) {
       }
       // Check 15 mins
       else if (diffMinutes <= 15 && !reminder.notified_15m) {
-        await sendTelegramAlert(dealership.name, reminder, "через 15 МИНУТ!");
+        await sendTelegramAlert(dealership.name, reminder, `через ${Math.ceil(diffMinutes)} минут!`);
         updatedReminders[i].notified_15m = true;
         updatedReminders[i].notified_1h = true;
         updatedReminders[i].notified_3h = true;
@@ -72,7 +72,8 @@ export async function GET(request: Request) {
 }
 
 async function sendTelegramAlert(dealershipName: string, reminder: any, timeLeft: string) {
-  const message = `🔔 *Напоминание: ${reminder.type}*\n\n🚗 Объект: *${dealershipName}*\n🕒 Время: ${new Date(reminder.date).toLocaleString('ru-RU')}\n⏳ Ожидается: *${timeLeft}*\n👤 От: ${reminder.author}`;
+  const formattedTime = new Date(reminder.date).toLocaleString('ru-RU', { timeZone: 'Europe/Kyiv' });
+  const message = `🔔 *Напоминание: ${reminder.type}*\n\n🚗 Объект: *${dealershipName}*\n🕒 Время: ${formattedTime}\n⏳ Ожидается: *${timeLeft}*\n👤 От: ${reminder.author}`;
 
   for (const adminId of ADMIN_IDS) {
     try {
