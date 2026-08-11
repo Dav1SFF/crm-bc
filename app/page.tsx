@@ -119,7 +119,12 @@ export default function Home() {
     if (authStatus === "true") {
       setIsAuthenticated(true);
       if (user) setCurrentUser(user);
-      if (role) setUserRole(role);
+      if (role) {
+        setUserRole(role);
+        if (role === 'Manager') {
+          setActiveCrm('calls');
+        }
+      }
       
       // Логируем посещение
       if (user) logAction(user, 'PAGE_VISIT', undefined, undefined, { path: '/' });
@@ -485,13 +490,15 @@ export default function Home() {
               
               {/* CRM Type Tabs */}
               <div className="flex bg-slate-100 p-1 rounded-xl w-fit">
-                <button
-                  onClick={() => setActiveCrm('offline')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition ${activeCrm === "offline" ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
-                >
-                  <MapPin className="w-4 h-4 inline-block mr-1 -mt-0.5" />
-                  Встречи (Оффлайн)
-                </button>
+                {userRole !== 'Manager' && (
+                  <button
+                    onClick={() => setActiveCrm('offline')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${activeCrm === "offline" ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
+                  >
+                    <MapPin className="w-4 h-4 inline-block mr-1 -mt-0.5" />
+                    Встречи (Оффлайн)
+                  </button>
+                )}
                 <button
                   onClick={() => setActiveCrm('calls')}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition ${activeCrm === "calls" ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
