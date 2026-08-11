@@ -73,7 +73,7 @@ export async function GET(request: Request) {
 
 async function sendTelegramAlert(dealershipId: string, dealershipName: string, reminder: any, timeLeft: string) {
   const formattedTime = new Date(reminder.date).toLocaleString('ru-RU', { timeZone: 'Europe/Kyiv' });
-  const objectLink = `https://crm-bc.vercel.app/dealership/${dealershipId}`;
+  const objectLink = `https://crm-bc-iota.vercel.app/dealership/${dealershipId}`;
   
   const message = `🔔 *Напоминание: ${reminder.type}*\n\n🚗 Объект: *${dealershipName}*\n🕒 Время: ${formattedTime}\n⏳ Ожидается: *${timeLeft}*\n👤 От: ${reminder.author}\n\n🔗 [Открыть объект в CRM](${objectLink})`;
 
